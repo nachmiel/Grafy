@@ -2,39 +2,78 @@ import os
 
 os.system('cls' if os.name == 'nt' else 'clear')
 
-with open("lab_4\graf.txt", "r") as file:
-    lines = file.read().splitlines()
+file = open("lab_4/graf.txt", "r")
+lines = file.read().splitlines()
+file.close()
 
-first_line = lines[0]
-first_value = int(first_line.split()[0]) #liczba wierzchołków
-second_value = int(first_line.split()[1]) #liczba krawędzi
+n = int(lines[0].split()[0])
 
-# print(f"Stopnie wierzchołków:")
-# w = 0
-# sequence = []
-# for x in range(1,first_value+1):
-#     w += 1
-#     numb = 0
-#     for char in lines[1:]: 
-#         v1 = int(char.split(" ")[0])
-#         v2 = int(char.split(" ")[1])
-#         if x == v1 or x == v2:
-#             numb += 1
-#     sequence.append(numb)
-#     print(f"deg({w})={numb}")
-# print(f"Ciag stopni grafu G: {sorted(sequence)}")
+adj = []
+for i in range(n):
+    adj.append([])
 
-lista_Sasiedztwa = []
-for i in range(1, first_value + 1):
-    lista_Sasiedztwa.append([])
+edges = []
 
-print(lista_Sasiedztwa)
+for i in range(1, len(lines)):
+    u, v, w = map(int, lines[i].split())
+    u -= 1
+    v -= 1
 
-for x in range(1,first_value+1):
-    for char in lines[1:]:
-        vi = int(char.split(" ")[0])
-        vj = int(char.split(" ")[1])
-        wk = int(char.split(" ")[2])
-        lista_Sasiedztwa[vi].append(f"{vj} {wk}") #https://zpe.gov.pl/a/przeczytaj/DPNBGJ0t8 algorytmu Dijkstry
+    adj[u].append(v)
+    adj[v].append(u)
 
-print(lista_Sasiedztwa) # [[], ['2 28', '4 15', '2 28', '4 15', '2 28', '4 15', '2 28', '4 15'], ['3 37', '4 42', '3 37', '4 42', '3 37', '4 42', '3 37', '4 42'], ['4 95', '4 95', '4 95', '4 95'], []]
+    edges.append((u, v))
+
+deg = [0] * n
+
+for u, v in edges:
+    deg[u] += 1
+    deg[v] += 1
+
+odd = []
+for i in range(n):
+    if deg[i] % 2 == 1:
+        odd.append(i)
+
+# kopia grafu
+g = {}
+for i in range(n):
+    g[i] = []
+
+for u, v in edges:
+    g[u].append(v)
+    g[v].append(u)
+
+# dodajemy krawędź między nieparzystymi
+u = odd[0]
+v = odd[1]
+g[u].append(v)
+g[v].append(u)
+
+# sortujemy żeby wynik był stały
+for i in g:
+    g[i].sort()
+
+def euler(start):
+    stack = [start]
+    path = []
+
+    local = {}
+    for i in g:
+        local[i] = g[i][:]
+
+    while stack:
+        v = stack[-1]
+
+        if local[v]:
+            u = local[v].pop(0)
+            local[u].remove(v)
+            stack.append(u)
+        else:
+            path.append(stack.pop())
+
+    return path[::-1]
+
+cycle = euler(0)
+
+print([x + 1 for x in cycle])
