@@ -1,167 +1,195 @@
-"""
-Problem Chińskiego Listonosza
-- każda krawędź musi być odwiedzona co najmniej raz
-- trasa musi być zamknięta (wraca do startu)
-- szukamy trasy o minimalnej sumie wag
-"""
-
-
-# ── Wczytaj graf z pliku ──────────────────────────────────────────────────────
+plik = "lab_4/graf.txt"
 
 def wczytaj_graf(plik):
     with open(plik) as f:
         linie = f.read().splitlines()
 
     v, e = map(int, linie[0].split())
+
     krawedzie = []
-    for linia in linie[1:e+1]:
-        u, w, waga = map(int, linia.split())
+    for i in range(1, e + 1):
+        u, w, waga = map(int, linie[i].split())
         krawedzie.append((u, w, waga))
+
     return v, krawedzie
 
 
-# ── Dijkstra: najkrótsza ścieżka od źródła do wszystkich wierzchołków ─────────
+#  Dijkstra – najkrótsza ścieżka od źródła do pozostałych
 
-def dijkstra(adj, zrodlo, n):
-    dist = [float('inf')] * (n + 1)
-    prev = [None] * (n + 1)
-    dist[zrodlo] = 0
+def dijkstra(lista_sasiedztwa, start, n):
+    odleglosc = [float('inf')] * (n + 1)
+    poprzedni = [None] * (n + 1)
     odwiedzone = [False] * (n + 1)
+    odleglosc[start] = 0
 
     for _ in range(n):
-        # Znajdź nieodwiedzony wierzchołek z najmniejszym dystansem (przegląd całej listy)
+        # Znajdź nieodwiedzony wierzchołek z najmniejszą odległością
         u = None
         for i in range(1, n + 1):
-            if not odwiedzone[i] and (u is None or dist[i] < dist[u]):
-                u = i
+            if not odwiedzone[i]:
+                if u is None or odleglosc[i] < odleglosc[u]:
+                    u = i
 
-        if dist[u] == float('inf'):
-            break  # pozostałe wierzchołki są nieosiągalne
+        # Jeśli najlepsza odległość to nieskończoność – reszta nieosiągalna
+        if odleglosc[u] == float('inf'):
+            break
 
         odwiedzone[u] = True
-        for v, w in adj[u]:
-            if dist[u] + w < dist[v]:
-                dist[v] = dist[u] + w
-                prev[v] = u
 
-    return dist, prev
+        # Zaktualizuj odległości sąsiadów
+        for sasiad, waga in lista_sasiedztwa[u]:
+            nowa_odleglosc = odleglosc[u] + waga
+            if nowa_odleglosc < odleglosc[sasiad]:
+                odleglosc[sasiad] = nowa_odleglosc
+                poprzedni[sasiad] = u
+
+    return odleglosc, poprzedni
 
 
-def odtworz_sciezke(prev, cel):
+# Odtwarza listę wierzchołków tworzących ścieżkę do celu
+def odtworz_sciezke(poprzedni, cel):
     sciezka = []
-    while cel is not None:
-        sciezka.append(cel)
-        cel = prev[cel]
-    return list(reversed(sciezka))
+    aktualny = cel
+    while aktualny is not None:
+        sciezka.append(aktualny)
+        aktualny = poprzedni[aktualny]
+    sciezka.reverse()
+    return sciezka
 
 
-# ── Minimalne parowanie wierzchołków o nieparzystym stopniu (brute-force) ─────
-# Liczba takich wierzchołków jest zawsze parzysta i zwykle mała
+#  Minimalne parowanie wierzchołków o nieparzystym stopniu
+#  (brute-force – działa dobrze gdy takich wierzchołków jest mało)
 
-def min_parowanie(nieparzyste, dist):
+def min_parowanie(nieparzyste, odleglosci):
     if not nieparzyste:
         return [], 0
 
-    best_koszt = [float('inf')]
-    best_pary  = [[]]
+    najlepszy_koszt = float('inf')
+    najlepsze_pary = []
 
-    def szukaj(pozostale, pary, koszt):
+    def szukaj(pozostale, aktualne_pary, aktualny_koszt):
+        nonlocal najlepszy_koszt, najlepsze_pary
+
+        # Wszystkie wierzchołki sparowane – sprawdź czy to najlepszy wynik
         if not pozostale:
-            if koszt < best_koszt[0]:
-                best_koszt[0] = koszt
-                best_pary[0]  = pary[:]
+            if aktualny_koszt < najlepszy_koszt:
+                najlepszy_koszt = aktualny_koszt
+                najlepsze_pary = aktualne_pary[:]
             return
-        u = pozostale[0]
+
+        # Sparuj pierwszy wierzchołek z każdym pozostałym
+        pierwszy = pozostale[0]
         for i in range(1, len(pozostale)):
-            v = pozostale[i]
-            nowe = [x for j, x in enumerate(pozostale) if j != 0 and j != i]
-            szukaj(nowe, pary + [(u, v)], koszt + dist[u][v])
+            drugi = pozostale[i]
+            # Pozostałe wierzchołki po usunięciu tej pary
+            reszta = [x for j, x in enumerate(pozostale) if j != 0 and j != i]
+            dodatkowy_koszt = odleglosci[pierwszy][drugi]
+            szukaj(reszta, aktualne_pary + [(pierwszy, drugi)], aktualny_koszt + dodatkowy_koszt)
 
     szukaj(nieparzyste, [], 0)
-    return best_pary[0], best_koszt[0]
+    return najlepsze_pary, najlepszy_koszt
 
+#  Algorytm Hierholzera – szukanie obwodu Eulera w multigrafie
 
-# ── Algorytm Hierholzera: obwód Eulera w multigrafie ─────────────────────────
+def znajdz_obwod_eulera(lista_sasiedztwa, start):
+    # Kopia listy sąsiedztwa – będziemy usuwać krawędzie
+    kopia = {}
+    for u in lista_sasiedztwa:
+        kopia[u] = list(lista_sasiedztwa[u])
 
-def euler(adj, start):
-    # Kopiujemy listy sąsiedztwa żeby je modyfikować
-    adj = {u: list(s) for u, s in adj.items()}
-    stos, obwod = [start], []
+    stos = [start]
+    obwod = []
 
     while stos:
         u = stos[-1]
-        if adj.get(u):
-            v, w = adj[u].pop()
-            # Usuń krawędź w drugą stronę
-            for i, (x, wx) in enumerate(adj.get(v, [])):
+        if kopia.get(u):
+            # Idź po następnej dostępnej krawędzi
+            v, w = kopia[u].pop()
+            # Usuń krawędź w przeciwnym kierunku
+            for i, (x, wx) in enumerate(kopia.get(v, [])):
                 if x == u and wx == w:
-                    adj[v].pop(i)
+                    kopia[v].pop(i)
                     break
             stos.append(v)
         else:
+            # Brak krawędzi – dodaj do obwodu
             obwod.append(stos.pop())
 
-    return list(reversed(obwod))
+    obwod.reverse()
+    return obwod
 
 
-# ── Zapis do pliku Graphviz ───────────────────────────────────────────────────
+#  Zapis grafu do pliku Graphviz (.gv)
 
-def zapisz_gv(krawedzie, plik):
-    with open(plik, 'w') as f:
+
+def zapisz_graphviz(krawedzie, plik_wyjsciowy):
+    with open(plik_wyjsciowy, 'w') as f:
         f.write("graph G {\n")
         for u, v, w in krawedzie:
             f.write(f'    {u} -- {v} [label="{w}"];\n')
         f.write("}\n")
 
 
-# ── MAIN ─────────────────────────────────────────────────────────────────────
+#MAIN
 
-n, krawedzie = wczytaj_graf("lab_4/graf.txt")
+# 1. Wczytaj graf
+n, krawedzie = wczytaj_graf(plik)
 
-# Buduj listę sąsiedztwa – dla każdego wierzchołka inicjalizujemy pustą listę
-adj = {i: [] for i in range(1, n+1)}
+# 2. Zbuduj listę sąsiedztwa
+lista_sasiedztwa = {i: [] for i in range(1, n + 1)}
 for u, v, w in krawedzie:
-    adj[u].append((v, w))
-    adj[v].append((u, w))
+    lista_sasiedztwa[u].append((v, w))
+    lista_sasiedztwa[v].append((u, w))
 
-# Znajdź wierzchołki o nieparzystym stopniu
-stopien = {i: 0 for i in range(1, n+1)}
+# 3. Znajdź wierzchołki o nieparzystym stopniu
+stopien = {i: 0 for i in range(1, n + 1)}
 for u, v, _ in krawedzie:
     stopien[u] += 1
     stopien[v] += 1
-nieparzyste = [u for u in range(1, n+1) if stopien[u] % 2 == 1]
 
-# Oblicz najkrótsze ścieżki między każdą parą wierzchołków nieparzystych
-dist  = {}
-prevs = {}
+nieparzyste = [u for u in range(1, n + 1) if stopien[u] % 2 == 1]
+print(f"Wierzchołki o nieparzystym stopniu: {nieparzyste}")
+
+# 4. Oblicz najkrótsze ścieżki między każdą parą wierzchołków nieparzystych
+odleglosci = {}
+poprzednie = {}
 for u in nieparzyste:
-    dist[u], prevs[u] = dijkstra(adj, u, n)
+    odleglosci[u], poprzednie[u] = dijkstra(lista_sasiedztwa, u, n)
 
-# Znajdź minimalne parowanie
-pary, koszt_extra = min_parowanie(nieparzyste, dist)
+# 5. Znajdź minimalne parowanie (najmniejszy koszt dodatkowych krawędzi)
+pary, koszt_dodatkowy = min_parowanie(nieparzyste, odleglosci)
+print(f"Dobrane pary: {pary}, koszt dodatkowy: {koszt_dodatkowy}")
 
-# Dodaj duplikaty krawędzi dla wyrównania stopni (multigraf)
-multi_adj = {i: [] for i in range(1, n+1)}
+# 6. Zbuduj multigraf – dodaj duplikaty krawędzi dla par
+multigraf = {i: [] for i in range(1, n + 1)}
 for u, v, w in krawedzie:
-    multi_adj[u].append((v, w))
-    multi_adj[v].append((u, w))
+    multigraf[u].append((v, w))
+    multigraf[v].append((u, w))
 
 for u, v in pary:
-    sciezka = odtworz_sciezke(prevs[u], v)
+    sciezka = odtworz_sciezke(poprzednie[u], v)
     for i in range(len(sciezka) - 1):
-        a, b = sciezka[i], sciezka[i+1]
-        # Znajdź wagę krawędzi a-b
-        w = next(ww for (x, ww) in adj[a] if x == b)
-        multi_adj[a].append((b, w))
-        multi_adj[b].append((a, w))
+        a = sciezka[i]
+        b = sciezka[i + 1]
+        # Znajdź wagę krawędzi a-b w oryginalnym grafie
+        waga = None
+        for (sasiad, w) in lista_sasiedztwa[a]:
+            if sasiad == b:
+                waga = w
+                break
+        multigraf[a].append((b, waga))
+        multigraf[b].append((a, waga))
 
-# Znajdź obwód Eulera
-obwod = euler(multi_adj, krawedzie[0][0])
+# 7. Znajdź obwód Eulera (trasę listonosza)
+start = krawedzie[0][0]
+trasa = znajdz_obwod_eulera(multigraf, start)
 
-# Wyniki
-suma = sum(w for _, _, w in krawedzie)
-print("Trasa:", " -- ".join(map(str, obwod)))
-print(f"Suma krawędzi: {suma}, koszt dodatkowy: {koszt_extra}, łącznie: {suma + koszt_extra}")
+# 8. Wyświetl wyniki
+suma_krawedzi = sum(w for _, _, w in krawedzie)
+print("Trasa:", " -> ".join(map(str, trasa)))
+print(f"Suma wag wszystkich krawędzi: {suma_krawedzi}")
+print(f"Koszt dodatkowych przejść:    {koszt_dodatkowy}")
+print(f"Łączny koszt trasy:           {suma_krawedzi + koszt_dodatkowy}")
 
-zapisz_gv(krawedzie, "gv.txt")
-print("Graf zapisany do gv.txt")
+# 9. Zapisz graf do pliku Graphviz
+zapisz_graphviz(krawedzie, "gv.txt")
